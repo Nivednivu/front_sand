@@ -6,156 +6,114 @@ import {
   adminQuaeyIdupdateAPI,
   adminAddQuaeyByIdAPI,
   queryDataAPI,
-  
 } from '../../Server/allAPI';
 import { useLocation, useNavigate } from 'react-router-dom';
-// adminAddQuaeyByIdAPI
-// updateAdminData
-function UserView() {
-const navigate = useNavigate()
-    const location = useLocation();
-    const { previewData,userData,vehicleNo,totalDistance,quantity,driverName,destinationState,purchaserName,purchaserAddress,travellingDate,requiredTime } = location.state || {};
-  const userId = userData?.data._id
 
- const serialNumber = previewData?.SerialNo || '';
+function UserView() {
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  const {
+    previewData,
+    userData,
+    vehicleNo,
+    totalDistance,
+    quantity,
+    driverName,
+    destinationState,
+    purchaserName,
+    purchaserAddress,
+    travellingDate,
+    requiredTime
+  } = location.state || {};
+
+  const userId = userData?.data?._id;
+  const serialNumber = previewData?.SerialNo || '';
 
   const [queryData, setQueryData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const printRef = useRef();
 
-  
-  
-
+  // Set initial query data from previewData on mount
   useEffect(() => {
-    // Only fetch if we have a valid ID
-    if (!userId) {
-      console.error('No user ID available');
-      navigate('/');
-      return;
+    if (previewData) {
+      setQueryData(previewData);
+      setLoading(false);
+    } else {
+      setError('No preview data available.');
+      setLoading(false);
     }
+  }, [previewData]);
 
-    const fetchData = async () => {
-      try {
-        setLoading(true);
-        setError(null);
+  const handleAfterPrint = async () => {
+    try {
+      if (!queryData) {
+        console.error("No query data available");
+        return;
+      }
 
-        // Pass the ID directly to the API function
-        const response = await adminAddQuaeyByIdAPI(userId);
-        
-        if (!response?.data) {
-          throw new Error('No data received from server');
-        }
+      
+      const lastAdminResponse = await adminAddQuaeyByIdAPI(userId);
+      if (!lastAdminResponse.data) {
+        throw new Error("Failed to fetch last admin data");
+      }
 
-        const data = response.data.data || response.data;
-        if (!data) throw new Error('Empty response data');
-// console.log("data",data);
+      const lastAdmin = lastAdminResponse.data;
 
+      if (!lastAdmin?._id) {
+        throw new Error("No valid admin ID found");
+      }
 
-        const formattedDate = data.travellingDate 
-        ? (() => {
-            const date = new Date(data.travellingDate);
-            const pad = num => num.toString().padStart(2, '0');
-            const randomSeconds = pad(Math.floor(Math.random() * 61)); // 00-60
-            const hours = date.getHours();
-            const twelveHour = hours % 12 || 12; // Convert to 12-hour format (1-12)
-            
-            return `${pad(date.getDate())}-${pad(date.getMonth() + 1)}-${date.getFullYear()} ` +
-                  ` ${pad(twelveHour)}:${pad(date.getMinutes())}:${randomSeconds}`;
-          })()
-        : "-";
-
-      const completeData = {
-        ...data,
+      const updatedData = {
+        ...queryData,
+        SerialNo: serialNumber,
         time: new Date().toLocaleString(),
-        formattedTravellingDate: formattedDate
+        _id: lastAdmin._id
       };
 
-      setQueryData(completeData);
+      const response = await adminQuaeyIdupdateAPI(userId, updatedData);
+      console.log("Admin update response:", response.data);
 
-      } catch (err) {
-        console.error('Fetch error:', err);
-        setError(err.message);
-      } finally {
-        setLoading(false);
+      if (response.status >= 200 && response.status < 300) {
+        setQueryData(updatedData);
+      } else {
+        throw new Error(response.data?.message || "Update failed with unknown error");
       }
-    };
 
-    fetchData();
-  }, [userId, navigate]); // Add userId to dependencies
-
-  // ... rest of your component
-
-const handleAfterPrint = async () => {
-  try {
-    if (!queryData) {
-      console.error("No query data available");
-      return;
+    } catch (err) {
+      setError(`Update failed: ${err.message}`);
     }
+  };
 
-    // First get the latest admin data to ensure we have the correct ID
-    const lastAdminResponse = await adminAddQuaeyByIdAPI(userId);
-    if (!lastAdminResponse.data) {
-      throw new Error("Failed to fetch last admin data");
-    }
-
-    const lastAdmin = lastAdminResponse.data;
-    
-    if (!lastAdmin?._id) {
-      throw new Error("No valid admin ID found");
-    }
-
-    
-
-    const updatedData = {
-      ...queryData,
-      SerialNo: serialNumber,
-      time: new Date().toLocaleString(),
-      _id: lastAdmin._id // Use the fetched admin ID
-    };
-
-    const response = await adminQuaeyIdupdateAPI(userId, updatedData);
-    
-    if (response.status >= 200 && response.status < 300) {
-      setQueryData(updatedData);
-    } else {
-      throw new Error(response.data?.message || "Update failed with unknown error");
-    }
-  } catch (err) {
-    console.error('Failed to update serial number:', err);
-    setError(`Update failed: ${err.message}`);
-  }
-};
-
-
-const handlePrint = async () => {
-  try {
-    // First ensure we have data to print
-    if (!printRef.current || !queryData) {
-      setError('No data available to print');
-      return;
-    }
-     const dataToSend = {
-      ...queryData,
-      SerialNo: serialNumber // Add the serial number here
-    };
-try {
-      const response = await queryDataAPI(dataToSend);
-      if (!response.data.success) {
-        throw new Error(response.data.message || 'Failed to save query data');
+  const handlePrint = async () => {
+    try {
+      if (!printRef.current || !queryData) {
+        setError('No data available to print');
+        return;
       }
-      console.log('Data saved to query API:', response.data);
-    } catch (apiError) {
-      console.error('Error saving to query API:', apiError);
-      // You might choose to continue with printing even if API fails
-      // or handle it differently based on your requirements
-    }
 
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) {
-      setError('Please allow popups for printing');
-      return;
-    }
+      const dataToSend = {
+        ...queryData,
+        SerialNo: serialNumber
+      };
+
+      try {
+        const response = await queryDataAPI(dataToSend);
+        if (!response.data.success) {
+          throw new Error(response.data.message || 'Failed to save query data');
+        }
+        console.log('Data saved to query API:', response.data);
+      } catch (apiError) {
+        console.error('Error saving to query API:', apiError);
+        // You can choose whether to continue or halt printing
+      }
+
+      const printWindow = window.open('', '_blank');
+      if (!printWindow) {
+        setError('Please allow popups for printing');
+        return;
+      }
     printWindow.document.write(`
 <html>
         <head>
