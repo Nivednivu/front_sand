@@ -1,23 +1,32 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
-import { toPng } from 'html-to-image';
 import './UserView.css';
 import {
   adminQuaeyIdupdateAPI,
   adminAddQuaeyByIdAPI,
   queryDataAPI,
-  
 } from '../../Server/allAPI';
 import { useLocation, useNavigate } from 'react-router-dom';
-// adminAddQuaeyByIdAPI
-// updateAdminData
-function UserView() {
-const navigate = useNavigate()
-    const location = useLocation();
-    const { previewData,userData,vehicleNo,totalDistance,quantity,driverName,destinationState,purchaserName,purchaserAddress,travellingDate,requiredTime } = location.state || {};
-  const userId = userData?.data._id
 
- const serialNumber = previewData?.SerialNo || '';
+function UserView() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { 
+    previewData,
+    userData,
+    vehicleNo,
+    totalDistance,
+    quantity,
+    driverName,
+    destinationState,
+    purchaserName,
+    purchaserAddress,
+    travellingDate,
+    requiredTime 
+  } = location.state || {};
+  
+  const userId = userData?.data._id;
+  const serialNumber = previewData?.SerialNo || '';
   const dispatchNumber = previewData?.dispatchNo || '';
 
   const [queryData, setQueryData] = useState(null);
@@ -25,13 +34,27 @@ const navigate = useNavigate()
   const [error, setError] = useState(null);
   const printRef = useRef();
 
-  
-  
+  // Prevent refresh when component mounts
+  useEffect(() => {
+    if (!location.state) {
+      navigate('/');
+      return;
+    }
+
+    const handleBeforeUnload = (e) => {
+      e.preventDefault();
+      e.returnValue = 'Are you sure you want to leave? Your changes may not be saved.';
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [navigate, location.state]);
 
   useEffect(() => {
-    // Only fetch if we have a valid ID
     if (!userId) {
-      console.error('No user ID available');
       navigate('/');
       return;
     }
@@ -39,10 +62,7 @@ const navigate = useNavigate()
     const fetchData = async () => {
       try {
         setLoading(true);
-        setError(null);
-
-        // Pass the ID directly to the API function
-        const response = await adminQuaeyIdupdateAPI(userId);
+        const response = await adminAddQuaeyByIdAPI(userId);
         
         if (!response?.data) {
           throw new Error('No data received from server');
@@ -50,29 +70,23 @@ const navigate = useNavigate()
 
         const data = response.data.data || response.data;
         if (!data) throw new Error('Empty response data');
-// console.log("data",data);
-
 
         const formattedDate = data.travellingDate 
-        ? (() => {
-            const date = new Date(data.travellingDate);
-            const pad = num => num.toString().padStart(2, '0');
-            const randomSeconds = pad(Math.floor(Math.random() * 61)); // 00-60
-            const hours = date.getHours();
-            const twelveHour = hours % 12 || 12; // Convert to 12-hour format (1-12)
-            
-            return `${pad(date.getDate())}-${pad(date.getMonth() + 1)}-${date.getFullYear()} ` +
-                  ` ${pad(twelveHour)}:${pad(date.getMinutes())}:${randomSeconds}`;
-          })()
-        : "-";
+          ? new Date(data.travellingDate).toLocaleString('en-GB', {
+              day: '2-digit',
+              month: '2-digit',
+              year: 'numeric',
+              hour: '2-digit',
+              minute: '2-digit',
+              hour12: false
+            }).replace(/\//g, '-')
+          : "-";
 
-      const completeData = {
-        ...data,
-        time: new Date().toLocaleString(),
-        formattedTravellingDate: formattedDate
-      };
-
-      setQueryData(completeData);
+        setQueryData({
+          ...data,
+          time: new Date().toLocaleString(),
+          formattedTravellingDate: formattedDate
+        });
 
       } catch (err) {
         console.error('Fetch error:', err);
@@ -83,83 +97,65 @@ const navigate = useNavigate()
     };
 
     fetchData();
-  }, [userId, navigate]); // Add userId to dependencies
+  }, [userId, navigate]);
 
-  // ... rest of your component
-
-const handleAfterPrint = async () => {
-  try {
-    if (!queryData) {
-      console.error("No query data available");
-      return;
-    }
-
-    // First get the latest admin data to ensure we have the correct ID
-    const lastAdminResponse = await adminAddQuaeyByIdAPI(userId);
-    if (!lastAdminResponse.data) {
-      throw new Error("Failed to fetch last admin data");
-    }
-
-    const lastAdmin = lastAdminResponse.data;
-    
-    if (!lastAdmin?._id) {
-      throw new Error("No valid admin ID found");
-    }
-
-    // Get current values with their original string format
-
-    // Function to format numbers with leading zeros like original
-  
-
-    const updatedData = {
-      ...queryData,
-      SerialNo: serialNumber,
-      time: new Date().toLocaleString(),
-      _id: lastAdmin._id // Use the fetched admin ID
-    };
-
-    const response = await adminQuaeyIdupdateAPI(userId, updatedData);
-    
-    if (response.status >= 200 && response.status < 300) {
-      setQueryData(updatedData);
-    } else {
-      throw new Error(response.data?.message || "Update failed with unknown error");
-    }
-  } catch (err) {
-    console.error('Failed to update serial number:', err);
-    setError(`Update failed: ${err.message}`);
-  }
-};
-
-
-const handlePrint = async () => {
-  try {
-    // First ensure we have data to print
-    if (!printRef.current || !queryData) {
-      setError('No data available to print');
-      return;
-    }
-     const dataToSend = {
-      ...queryData,
-      SerialNo: serialNumber // Add the serial number here
-    };
-try {
-      const response = await queryDataAPI(dataToSend);
-      if (!response.data.success) {
-        throw new Error(response.data.message || 'Failed to save query data');
+  const handleAfterPrint = async () => {
+    try {
+      if (!queryData) {
+        throw new Error("No query data available");
       }
-      console.log('Data saved to query API:', response.data);
-    } catch (apiError) {
-      console.error('Error saving to query API:', apiError);
-      // You might choose to continue with printing even if API fails
-      // or handle it differently based on your requirements
-    }
 
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) {
-      setError('Please allow popups for printing');
-      return;
+      const lastAdminResponse = await adminAddQuaeyByIdAPI(userId);
+      if (!lastAdminResponse.data) {
+        throw new Error("Failed to fetch admin data");
+      }
+
+      const lastAdmin = lastAdminResponse.data;
+      if (!lastAdmin?._id) {
+        throw new Error("No valid admin ID found");
+      }
+
+      const updatedData = {
+        ...queryData,
+        SerialNo: serialNumber,
+        time: new Date().toISOString(),
+        _id: lastAdmin._id
+      };
+
+      const response = await adminQuaeyIdupdateAPI(userId, updatedData);
+      
+      if (response.status >= 200 && response.status < 300) {
+        setQueryData(updatedData);
+      } else {
+        throw new Error(response.data?.message || "Update failed");
+      }
+    } catch (err) {
+      console.error('Update error:', err);
+      setError(`Update failed: ${err.message}`);
     }
+  };
+
+  const handlePrint = async () => {
+    try {
+      if (!printRef.current || !queryData) {
+        throw new Error('No data available to print');
+      }
+
+      // Save data first
+      const saveResponse = await queryDataAPI({
+        ...queryData,
+        SerialNo: serialNumber
+      });
+
+      if (!saveResponse.data?.success) {
+        console.warn('Data save warning:', saveResponse.data?.message);
+      }
+
+      // Open print window
+      const printWindow = window.open('', '_blank');
+      if (!printWindow) {
+        throw new Error('Please allow popups for printing');
+      }
     printWindow.document.write(`
 <html>
         <head>
