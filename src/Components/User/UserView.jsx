@@ -11,7 +11,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 function UserView() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { 
+  const {
     previewData,
     userData,
     vehicleNo,
@@ -22,82 +22,48 @@ function UserView() {
     purchaserName,
     purchaserAddress,
     travellingDate,
-    requiredTime 
+    requiredTime
   } = location.state || {};
   
   const userId = userData?.data._id;
   const serialNumber = previewData?.SerialNo || '';
-  const dispatchNumber = previewData?.dispatchNo || '';
-
   const [queryData, setQueryData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const printRef = useRef();
 
-  // Prevent refresh when component mounts
+  // Initialize data from location state or fetch if needed
   useEffect(() => {
-    if (!location.state) {
-      navigate('/');
-      return;
-    }
-
-    const handleBeforeUnload = (e) => {
-      e.preventDefault();
-      e.returnValue = 'Are you sure you want to leave? Your changes may not be saved.';
-    };
-
-    window.addEventListener('beforeunload', handleBeforeUnload);
-
-    return () => {
-      window.removeEventListener('beforeunload', handleBeforeUnload);
-    };
-  }, [navigate, location.state]);
-
-  useEffect(() => {
-    if (!userId) {
-      navigate('/');
-      return;
-    }
-
-    const fetchData = async () => {
+    const initializeData = async () => {
       try {
-        setLoading(true);
-        const response = await adminAddQuaeyByIdAPI(userId);
-        
-        if (!response?.data) {
-          throw new Error('No data received from server');
+        if (previewData) {
+          // Use data passed from previous screen
+          setQueryData(previewData);
+        } else if (userId) {
+          // Fetch data if not passed via location state
+          const response = await adminAddQuaeyByIdAPI(userId);
+          if (response.data) {
+            setQueryData(response.data);
+          } else {
+            throw new Error("No data received from server");
+          }
+        } else {
+          throw new Error("No user ID or preview data available");
         }
-
-        const data = response.data.data || response.data;
-        if (!data) throw new Error('Empty response data');
-
-        const formattedDate = data.travellingDate 
-          ? new Date(data.travellingDate).toLocaleString('en-GB', {
-              day: '2-digit',
-              month: '2-digit',
-              year: 'numeric',
-              hour: '2-digit',
-              minute: '2-digit',
-              hour12: false
-            }).replace(/\//g, '-')
-          : "-";
-
-        setQueryData({
-          ...data,
-          time: new Date().toLocaleString(),
-          formattedTravellingDate: formattedDate
-        });
-
       } catch (err) {
-        console.error('Fetch error:', err);
+        console.error('Data initialization error:', err);
         setError(err.message);
       } finally {
         setLoading(false);
       }
     };
 
-    fetchData();
-  }, [userId, navigate]);
+    initializeData();
+  }, [userId, previewData]);
+
+  const refreshPage = () => {
+    navigate(0); // Reload current page
+  };
 
   const handleAfterPrint = async () => {
     try {
@@ -106,8 +72,8 @@ function UserView() {
       }
 
       const lastAdminResponse = await adminAddQuaeyByIdAPI(userId);
-      if (!lastAdminResponse.data) {
-        throw new Error("Failed to fetch admin data");
+      if (!lastAdminResponse?.data) {
+        throw new Error("Failed to fetch last admin data");
       }
 
       const lastAdmin = lastAdminResponse.data;
@@ -118,7 +84,7 @@ function UserView() {
       const updatedData = {
         ...queryData,
         SerialNo: serialNumber,
-        time: new Date().toISOString(),
+        time: new Date().toLocaleString(),
         _id: lastAdmin._id
       };
 
@@ -126,11 +92,12 @@ function UserView() {
       
       if (response.status >= 200 && response.status < 300) {
         setQueryData(updatedData);
+        refreshPage();
       } else {
         throw new Error(response.data?.message || "Update failed");
       }
     } catch (err) {
-      console.error('Update error:', err);
+      console.error('Failed to update serial number:', err);
       setError(`Update failed: ${err.message}`);
     }
   };
@@ -141,21 +108,26 @@ function UserView() {
         throw new Error('No data available to print');
       }
 
-      // Save data first
-      const saveResponse = await queryDataAPI({
+      const dataToSend = {
         ...queryData,
         SerialNo: serialNumber
-      });
+      };
 
-      if (!saveResponse.data?.success) {
-        console.warn('Data save warning:', saveResponse.data?.message);
+      try {
+        const response = await queryDataAPI(dataToSend);
+        if (!response.data?.success) {
+          throw new Error(response.data?.message || 'Failed to save query data');
+        }
+        console.log('Data saved to query API:', response.data);
+      } catch (apiError) {
+        console.error('Error saving to query API:', apiError);
       }
 
-      // Open print window
-      const printWindow = window.open('', '_blank');
+         const printWindow = window.open('', '_blank');
       if (!printWindow) {
         throw new Error('Please allow popups for printing');
       }
+
     printWindow.document.write(`
 <html>
         <head>
