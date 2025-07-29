@@ -42,7 +42,7 @@ const navigate = useNavigate()
         setError(null);
 
         // Pass the ID directly to the API function
-        const response = await adminAddQuaeyByIdAPI(userId);
+        const response = await adminQuaeyIdupdateAPI(userId);
         
         if (!response?.data) {
           throw new Error('No data received from server');
@@ -107,22 +107,13 @@ const handleAfterPrint = async () => {
     }
 
     // Get current values with their original string format
-    const currentSerialStr = serialNumber ;
-    const currentDispatchStr = dispatchNumber ;
-
-    // Parse as numbers
-    const currentSerial = parseInt(currentSerialStr, 10);
-    const currentDispatch = parseInt(currentDispatchStr, 10);
 
     // Function to format numbers with leading zeros like original
-    const formatWithLeadingZeros = (originalStr, newNum) => {
-      return String(newNum).padStart(originalStr.length);
-    };
+  
 
     const updatedData = {
       ...queryData,
-      SerialNo: formatWithLeadingZeros(currentSerialStr, currentSerial),
-      dispatchNo: formatWithLeadingZeros(currentDispatchStr, currentDispatch),
+      SerialNo: serialNumber,
       time: new Date().toLocaleString(),
       _id: lastAdmin._id // Use the fetched admin ID
     };
