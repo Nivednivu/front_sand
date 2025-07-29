@@ -1,98 +1,145 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
+import { toPng } from 'html-to-image';
 import './UserView.css';
 import {
   adminQuaeyIdupdateAPI,
   adminAddQuaeyByIdAPI,
   queryDataAPI,
+  
 } from '../../Server/allAPI';
 import { useLocation, useNavigate } from 'react-router-dom';
-
+// adminAddQuaeyByIdAPI
+// updateAdminData
 function UserView() {
-  const navigate = useNavigate();
-  const location = useLocation();
-  const { 
-    previewData,
-    userData,
-    vehicleNo,
-    totalDistance,
-    quantity,
-    driverName,
-    destinationState,
-    purchaserName,
-    purchaserAddress,
-    travellingDate,
-    requiredTime 
-  } = location.state || {};
-  
-  // Validate and redirect if missing critical data
-  if (!userData?.data?._id) {
-    navigate('/');
-    return null;
-  }
+const navigate = useNavigate()
+    const location = useLocation();
+    const { previewData,userData,vehicleNo,totalDistance,quantity,driverName,destinationState,purchaserName,purchaserAddress,travellingDate,requiredTime } = location.state || {};
+  const userId = userData?.data._id
 
-  const userId = userData.data._id;
-  const serialNumber = previewData?.SerialNo || '';
+ const serialNumber = previewData?.SerialNo || '';
   const dispatchNumber = previewData?.dispatchNo || '';
 
-  // Initialize queryData with location.state values
-  const [queryData, setQueryData] = useState({
-    vehicleNo,
-    totalDistance,
-    quantity,
-    driverName,
-    destinationState,
-    purchaserName,
-    purchaserAddress,
-    travellingDate,
-    requiredTime,
-    SerialNo: serialNumber,
-    dispatchNo: dispatchNumber,
-    time: new Date().toLocaleString()
-  });
-
-  const [loading, setLoading] = useState(false);
+  const [queryData, setQueryData] = useState(null);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const printRef = useRef();
 
-  const formatWithLeadingZeros = (originalStr) => {
-    if (!originalStr) return '';
-    const num = parseInt(originalStr, 10) || 0;
-    return String(num).padStart(originalStr.length, '0');
-  };
+  
+  
 
-  const handleAfterPrint = async () => {
-    try {
-      const lastAdminResponse = await adminAddQuaeyByIdAPI(userId);
-      if (!lastAdminResponse.data) {
-        throw new Error("Failed to fetch admin data");
-      }
+  useEffect(() => {
+    // Only fetch if we have a valid ID
+    if (!userId) {
+      console.error('No user ID available');
+      navigate('/');
+      return;
+    }
 
-      const lastAdmin = lastAdminResponse.data;
-      if (!lastAdmin?._id) {
-        throw new Error("No valid admin ID found");
-      }
+    const fetchData = async () => {
+      try {
+        setLoading(true);
+        setError(null);
 
-      const updatedData = {
-        ...queryData,
-        SerialNo: formatWithLeadingZeros(serialNumber),
-        dispatchNo: formatWithLeadingZeros(dispatchNumber),
-        time: new Date().toISOString(),
-        _id: lastAdmin._id
+        // Pass the ID directly to the API function
+        const response = await adminAddQuaeyByIdAPI(userId);
+        
+        if (!response?.data) {
+          throw new Error('No data received from server');
+        }
+
+        const data = response.data.data || response.data;
+        if (!data) throw new Error('Empty response data');
+// console.log("data",data);
+
+
+        const formattedDate = data.travellingDate 
+        ? (() => {
+            const date = new Date(data.travellingDate);
+            const pad = num => num.toString().padStart(2, '0');
+            const randomSeconds = pad(Math.floor(Math.random() * 61)); // 00-60
+            const hours = date.getHours();
+            const twelveHour = hours % 12 || 12; // Convert to 12-hour format (1-12)
+            
+            return `${pad(date.getDate())}-${pad(date.getMonth() + 1)}-${date.getFullYear()} ` +
+                  ` ${pad(twelveHour)}:${pad(date.getMinutes())}:${randomSeconds}`;
+          })()
+        : "-";
+
+      const completeData = {
+        ...data,
+        time: new Date().toLocaleString(),
+        formattedTravellingDate: formattedDate
       };
 
-      const response = await adminQuaeyIdupdateAPI(userId, updatedData);
-      
-      if (response.status >= 200 && response.status < 300) {
-        setQueryData(updatedData);
-      } else {
-        throw new Error(response.data?.message || "Update failed");
+      setQueryData(completeData);
+
+      } catch (err) {
+        console.error('Fetch error:', err);
+        setError(err.message);
+      } finally {
+        setLoading(false);
       }
-    } catch (err) {
-      console.error('Update error:', err);
-      setError(`Update failed: ${err.message}`);
+    };
+
+    fetchData();
+  }, [userId, navigate]); // Add userId to dependencies
+
+  // ... rest of your component
+
+const handleAfterPrint = async () => {
+  try {
+    if (!queryData) {
+      console.error("No query data available");
+      return;
     }
-  };
+
+    // First get the latest admin data to ensure we have the correct ID
+    const lastAdminResponse = await adminAddQuaeyByIdAPI(userId);
+    if (!lastAdminResponse.data) {
+      throw new Error("Failed to fetch last admin data");
+    }
+
+    const lastAdmin = lastAdminResponse.data;
+    
+    if (!lastAdmin?._id) {
+      throw new Error("No valid admin ID found");
+    }
+
+    // Get current values with their original string format
+    const currentSerialStr = serialNumber ;
+    const currentDispatchStr = dispatchNumber ;
+
+    // Parse as numbers
+    const currentSerial = parseInt(currentSerialStr, 10);
+    const currentDispatch = parseInt(currentDispatchStr, 10);
+
+    // Function to format numbers with leading zeros like original
+    const formatWithLeadingZeros = (originalStr, newNum) => {
+      return String(newNum).padStart(originalStr.length);
+    };
+
+    const updatedData = {
+      ...queryData,
+      SerialNo: formatWithLeadingZeros(currentSerialStr, currentSerial),
+      dispatchNo: formatWithLeadingZeros(currentDispatchStr, currentDispatch),
+      time: new Date().toLocaleString(),
+      _id: lastAdmin._id // Use the fetched admin ID
+    };
+
+    const response = await adminQuaeyIdupdateAPI(userId, updatedData);
+    
+    if (response.status >= 200 && response.status < 300) {
+      setQueryData(updatedData);
+    } else {
+      throw new Error(response.data?.message || "Update failed with unknown error");
+    }
+  } catch (err) {
+    console.error('Failed to update serial number:', err);
+    setError(`Update failed: ${err.message}`);
+  }
+};
+
 
 const handlePrint = async () => {
   try {
