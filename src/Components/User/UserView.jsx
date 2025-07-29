@@ -18,7 +18,6 @@ const navigate = useNavigate()
   const userId = userData?.data._id
 
  const serialNumber = previewData?.SerialNo || '';
-  const dispatchNumber = previewData?.dispatchNo || '';
 
   const [queryData, setQueryData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -106,23 +105,11 @@ const handleAfterPrint = async () => {
       throw new Error("No valid admin ID found");
     }
 
-    // Get current values with their original string format
-    const currentSerialStr = serialNumber ;
-    const currentDispatchStr = dispatchNumber ;
-
-    // Parse as numbers
-    const currentSerial = parseInt(currentSerialStr, 10);
-    const currentDispatch = parseInt(currentDispatchStr, 10);
-
-    // Function to format numbers with leading zeros like original
-    const formatWithLeadingZeros = (originalStr, newNum) => {
-      return String(newNum).padStart(originalStr.length);
-    };
+    
 
     const updatedData = {
       ...queryData,
-      SerialNo: formatWithLeadingZeros(currentSerialStr, currentSerial),
-      dispatchNo: formatWithLeadingZeros(currentDispatchStr, currentDispatch),
+      SerialNo: serialNumber,
       time: new Date().toLocaleString(),
       _id: lastAdmin._id // Use the fetched admin ID
     };
